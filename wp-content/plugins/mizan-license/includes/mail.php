@@ -4,7 +4,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * توابع ارسال ایمیل لایسنس
+ * توابع ارسال ایمیل لایسنس و اطلاع‌رسانی رد
+ * - mizan_send_license_email : ارسال لایسنس پس از فعال‌سازی
+ * - mizan_send_reject_email  : ارسال پیام اطلاع‌رسانی پس از رد درخواست
  */
 
 // ارسال ایمیل لایسنس به کاربر پس از فعال‌سازی (حاوی license_key و license_token)
@@ -20,7 +22,20 @@ function mizan_send_license_email( $email, $first_name, $license_key, $license_t
     $message .= "برای فعال‌سازی برنامه، این توکن را در اپ وارد کنید (یا اپ باید آن را از سرور دریافت کند).\n\n";
     $message .= "با احترام\nمدیریت سایت " . get_bloginfo( 'name' );
 
-    // استفاده از wp_mail (فرض بر این است که WP Mail یا SMTP تنظیم شده است)
+    // استفاده از wp_mail (WP Mail یا SMTP باید پیکربندی شده باشد)
+    $headers = array( 'Content-Type: text/plain; charset=UTF-8' );
+    wp_mail( $email, $subject, $message, $headers );
+}
+
+// ارسال ایمیل اطلاع‌رسانی رد درخواست (با متن دلخواه یا پیش‌فرض)
+function mizan_send_reject_email( $email, $first_name, $message_text ) {
+    $subject = 'اطلاع‌رسانی درخواست برنامه میزان';
+    $message = "سلام " . esc_html( $first_name ) . " عزیز,\n\n";
+    $message .= "پیام مدیریت در رابطه با درخواست شما:\n\n";
+    $message .= esc_html( $message_text ) . "\n\n";
+    $message .= "در صورت نیاز به توضیحات بیشتر با پشتیبانی تماس بگیرید.\n\n";
+    $message .= "با احترام\nمدیریت سایت " . get_bloginfo( 'name' );
+
     $headers = array( 'Content-Type: text/plain; charset=UTF-8' );
     wp_mail( $email, $subject, $message, $headers );
 }

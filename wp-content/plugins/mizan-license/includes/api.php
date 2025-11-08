@@ -7,8 +7,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  * تعریف مسیرهای REST API برای ثبت‌نام و بررسی لایسنس
  * Routes:
  * - POST /wp-json/mizan/v1/register      -> ثبت درخواست (status = pending)
- * - POST /wp-json/mizan/v1/check         -> بررسی وضعیت لایسنس بر اساس device_hash یا email (برمی‌گرداند license_token اگر فعال باشد)
- * - POST /wp-json/mizan/v1/validate      -> اعتبارسنجی آنلاین JWT (ورودی: license_token)
+ * - POST /wp-json/mizan/v1/check         -> بررسی وضعیت لایسنس بر اساس device_hash یا email
+ * - POST /wp-json/mizan/v1/validate      -> اعتبارسنجی آنلاین JWT (اختیاری)
  */
 
 add_action( 'rest_api_init', function () {
@@ -64,6 +64,7 @@ function mizan_api_check( WP_REST_Request $request ) {
 
     $row = Mizan_License_DB::get_active_by_device_or_email( $device_hash, $email );
     if ( $row ) {
+        // لایسنس فعال پیدا شد
         return new WP_REST_Response( array(
             'success' => true,
             'license_key' => $row->license_key,
@@ -74,7 +75,7 @@ function mizan_api_check( WP_REST_Request $request ) {
         ), 200 );
     }
 
-    // اگر رکورد وجود دارد ولی pending یا rejected
+    // اگر رکورد وجود دارد ولی وضعیتش pending یا rejected یا expired باشد، آن را برگردان
     global $wpdb;
     $table = $wpdb->prefix . MIZAN_LICENSE_TABLE;
     $row_pending = null;
@@ -86,7 +87,25 @@ function mizan_api_check( WP_REST_Request $request ) {
     }
 
     if ( $row_pending ) {
-        return new WP_REST_Response( array( 'success' => false, 'status' => $row_pending->status, 'message' => 'اطلاعات ثبت‌نام شما ثبت شده است، منتظر تأیید مدیر باشید.' ), 200 );
+        $status = isset( $row_pending->status ) ? $row_pending->status : 'pending';
+
+        // اگر منقضی شده باشد وضعیت را بروز رسانی کن و پاسخ بده
+        if ( $row_pending->expires_at && time() > intval( $row_pending->expires_at ) && $status === 'active' ) {
+            $wpdb->update( $table, array( 'status' => 'expired' ), array( 'id' => $row_pending->id ), array( '%s' ), array( '%d' ) );
+            $status = 'expired';
+        }
+
+        // پیام بر اساس وضعیت
+        if ( $status === 'pending' ) {
+            return new WP_REST_Response( array( 'success' => false, 'status' => 'pending', 'message' => 'اطلاعات ثبت‌نام شما ثبت شده است، منتظر تأیید مدیر باشید.' ), 200 );
+        } elseif ( $status === 'rejected' ) {
+            return new WP_REST_Response( array( 'success' => false, 'status' => 'rejected', 'message' => 'درخواست شما رد شده است. لطفاً با پشتیبانی تماس بگیرید.' ), 200 );
+        } elseif ( $status === 'expired' ) {
+            return new WP_REST_Response( array( 'success' => false, 'status' => 'expired', 'message' => 'لایسنس شما منقضی شده است. لطفاً برای تمدید با مدیریت تماس بگیرید.' ), 200 );
+        } else {
+            // هر وضعیت دیگری: پیام عمومی
+            return new WP_REST_Response( array( 'success' => false, 'status' => $status, 'message' => 'وضعیت درخواست: ' . $status ), 200 );
+        }
     }
 
     return new WP_REST_Response( array( 'success' => false, 'message' => 'لایسنس پیدا نشد.' ), 404 );
