@@ -7,6 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * صفحه مدیریت درخواست‌ها در پنل ادمین
  * - نمایش لیست درخواست‌ها
  * - امکانات Approve / Reject / Extend
+ * - نمایش license_token برای هر رکورد فعال
  */
 
 /* افزودن منو در بخش مدیریت */
@@ -46,7 +47,7 @@ function mizan_handle_admin_actions() {
             // ارسال ایمیل
             $row = Mizan_License_DB::get_request_by_id( $id );
             if ( $row && $row->user_email ) {
-                mizan_send_license_email( $row->user_email, $row->first_name ?: $row->user_email, $res['license_key'], $res['expires_at'] );
+                mizan_send_license_email( $row->user_email, $row->first_name ?: $row->user_email, $res['license_key'], $res['license_token'], $res['expires_at'] );
             }
             wp_safe_redirect( admin_url( 'admin.php?page=mizan-licenses&msg=approved' ) );
             exit;
@@ -165,6 +166,17 @@ function mizan_admin_page() {
                                     <button class="button" type="submit">تمدید / فعال‌سازی</button>
                                 </form>
                             <?php endif; ?>
+
+                            <?php if ( $r->status === 'active' ) : ?>
+                                <div style="margin-top:8px;">
+                                    <strong>لایسنس:</strong>
+                                    <div style="font-family:monospace;word-break:break-all;max-width:300px;"><?php echo esc_html( $r->license_key ); ?></div>
+                                    <strong>توکن:</strong>
+                                    <div style="font-family:monospace;word-break:break-all;max-width:300px;"><?php echo esc_html( $r->license_token ); ?></div>
+                                    <div><small>انقضا: <?php echo esc_html( Mizan_License_Manager::format_time( intval( $r->expires_at ) ) ); ?></small></div>
+                                </div>
+                            <?php endif; ?>
+
                         </td>
                     </tr>
                 <?php endforeach; else: ?>

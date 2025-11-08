@@ -7,7 +7,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  * تعریف مسیرهای REST API برای ثبت‌نام و بررسی لایسنس
  * Routes:
  * - POST /wp-json/mizan/v1/register      -> ثبت درخواست (status = pending)
- * - POST /wp-json/mizan/v1/check         -> بررسی وضعیت لایسنس بر اساس device_hash یا email
+ * - POST /wp-json/mizan/v1/check         -> بررسی وضعیت لایسنس بر اساس device_hash یا email (برمی‌گرداند license_token اگر فعال باشد)
+ * - POST /wp-json/mizan/v1/validate      -> اعتبارسنجی آنلاین JWT (ورودی: license_token)
  */
 
 add_action( 'rest_api_init', function () {
@@ -20,6 +21,12 @@ add_action( 'rest_api_init', function () {
     register_rest_route( 'mizan/v1', '/check', array(
         'methods'             => 'POST',
         'callback'            => 'mizan_api_check',
+        'permission_callback' => '__return_true',
+    ) );
+
+    register_rest_route( 'mizan/v1', '/validate', array(
+        'methods'             => 'POST',
+        'callback'            => 'mizan_api_validate',
         'permission_callback' => '__return_true',
     ) );
 } );
@@ -60,14 +67,14 @@ function mizan_api_check( WP_REST_Request $request ) {
         return new WP_REST_Response( array(
             'success' => true,
             'license_key' => $row->license_key,
+            'license_token' => $row->license_token,
             'expires_at'  => intval( $row->expires_at ),
             'issued_at'   => intval( $row->issued_at ),
             'message'     => 'لایسنس فعال است.'
         ), 200 );
     }
 
-    // اگر رکورد وجود دارد ولی pending
-    // بررسی رکورد مبتنی بر device_hash یا ایمیل
+    // اگر رکورد وجود دارد ولی pending یا rejected
     global $wpdb;
     $table = $wpdb->prefix . MIZAN_LICENSE_TABLE;
     $row_pending = null;
@@ -83,4 +90,20 @@ function mizan_api_check( WP_REST_Request $request ) {
     }
 
     return new WP_REST_Response( array( 'success' => false, 'message' => 'لایسنس پیدا نشد.' ), 404 );
+}
+
+// اعتبارسنجی آنلاین JWT (برای اطمینان از امضا و منقضی شدن)
+function mizan_api_validate( WP_REST_Request $request ) {
+    $params = $request->get_json_params();
+    $license_token = isset( $params['license_token'] ) ? sanitize_text_field( $params['license_token'] ) : '';
+    if ( empty( $license_token ) ) {
+        return new WP_REST_Response( array( 'success' => false, 'message' => 'license_token لازم است.' ), 400 );
+    }
+
+    $payload = Mizan_License_Manager::verify_jwt( $license_token );
+    if ( $payload ) {
+        return new WP_REST_Response( array( 'success' => true, 'payload' => $payload ), 200 );
+    }
+
+    return new WP_REST_Response( array( 'success' => false, 'message' => 'توکن نامعتبر یا منقضی شده.' ), 403 );
 }

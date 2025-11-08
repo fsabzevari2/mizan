@@ -1,25 +1,28 @@
 // lib/src/app.dart
-// تنظیمات کلی اپ، تم، مسیرها
+// تنظیمات کلی اپ و مسیرها
 import 'package:flutter/material.dart';
-import 'pages/auth/login_page.dart';
-import 'pages/auth/register_page.dart';
-import 'pages/auth/trial_start_page.dart';
+import 'pages/auth/login/login_page.dart';
+import 'pages/auth/register/register_page.dart';
 import 'pages/home/home_page.dart';
-import 'theme/app_theme.dart';
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Mizan',
+      title: 'Mizan - حسابداری',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      initialRoute: '/',
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+        fontFamily: 'IranSans',
+      ),
+      initialRoute: '/login',
       routes: {
-        '/': (context) => HomePage(),
-        '/login': (context) => LoginPage(),
-        '/register': (context) => RegisterPage(),
-        '/trial': (context) => TrialStartPage(),
+        '/login': (context) => const LoginPage(),
+        '/register': (context) => const RegisterPage(),
+        '/home': (context) => const HomePage(),
       },
     );
   }

@@ -7,7 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * کلاس دیتابیس افزونه
  * - ایجاد جدول
  * - درج درخواست
- * - پاسخ‌دهی به admin UI و api
+ * - مدیریت وضعیت‌ها (approve/reject/extend)
  */
 
 class Mizan_License_DB {
@@ -28,6 +28,7 @@ class Mizan_License_DB {
             store_name VARCHAR(191) DEFAULT NULL,
             device_hash VARCHAR(255) DEFAULT NULL,
             license_key VARCHAR(255) DEFAULT NULL,
+            license_token TEXT DEFAULT NULL, /* JWT امضاشده */
             status VARCHAR(50) NOT NULL DEFAULT 'pending', /* pending, active, revoked, expired, rejected */
             issued_at BIGINT(20) DEFAULT NULL,
             expires_at BIGINT(20) DEFAULT NULL,
@@ -95,33 +96,53 @@ class Mizan_License_DB {
         return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ) );
     }
 
-    // فعال‌سازی: ایجاد license_key، issued_at، expires_at و تغییر status
+    // فعال‌سازی: ایجاد license_key، issued_at، expires_at، license_token و تغییر status
     public static function activate_request( $id, $duration_days = 14 ) {
         global $wpdb;
         $table = $wpdb->prefix . MIZAN_LICENSE_TABLE;
         $now = time();
         $expires = $now + ( $duration_days * 24 * 60 * 60 );
 
+        // دریافت ردیف
+        $row = self::get_request_by_id( $id );
+        if ( ! $row ) return false;
+
+        // تولید کلید لایسنس
         $license_key = Mizan_License_Manager::generate_license_key();
+
+        // payload برای JWT شامل license_key و device_hash و issued/expires
+        $payload = array(
+            'license_key' => $license_key,
+            'device_hash' => $row->device_hash ?: '',
+            'issued_at'   => $now,
+            'expires_at'  => $expires,
+            'email'       => $row->user_email,
+            'request_id'  => intval( $row->id )
+        );
+
+        // تولید JWT امضاءشده (RS256)
+        $license_token = Mizan_License_Manager::generate_jwt( $payload );
 
         $updated = $wpdb->update(
             $table,
             array(
-                'license_key' => $license_key,
-                'status'      => 'active',
-                'issued_at'   => $now,
-                'expires_at'  => $expires,
+                'license_key'  => $license_key,
+                'license_token'=> $license_token,
+                'status'       => 'active',
+                'issued_at'    => $now,
+                'expires_at'   => $expires,
             ),
             array( 'id' => intval( $id ) ),
-            array( '%s','%s','%d','%d' ),
+            array( '%s','%s','%s','%d','%d' ),
             array( '%d' )
         );
 
         if ( $updated !== false ) {
             return array(
-                'license_key' => $license_key,
-                'issued_at'   => $now,
-                'expires_at'  => $expires,
+                'license_key'  => $license_key,
+                'license_token'=> $license_token,
+                'issued_at'    => $now,
+                'expires_at'   => $expires,
             );
         }
 
@@ -192,6 +213,13 @@ class Mizan_License_DB {
         );
 
         return $updated !== false;
+    }
+
+    // برگرداندن رکورد بر اساس license_key
+    public static function get_by_license_key( $license_key ) {
+        global $wpdb;
+        $table = $wpdb->prefix . MIZAN_LICENSE_TABLE;
+        return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE license_key = %s LIMIT 1", $license_key ) );
     }
 
 }
