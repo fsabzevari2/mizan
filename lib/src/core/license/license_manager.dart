@@ -1,35 +1,33 @@
 // lib/src/core/license/license_manager.dart
-// اعتبارسنجی JWT RS256 به‌صورت آفلاین با استفاده از کتابخانه jose
+// اعتبارسنجی JWT (موقتی): فقط decode و بررسی expiry از payload انجام می‌شود.
+// هشدار امنیتی: در این نسخه امضای JWT در کلاینت بررسی نمی‌شود.
+// نسخهٔ بعدی: بررسی RS256 با کلید عمومی یا native را اضافه خواهیم کرد.
 import 'dart:convert';
-import 'package:jose/jose.dart';
-import 'package:flutter/services.dart' show rootBundle;
 
 class LicenseManager {
-  // public key را از فایل می‌خوانیم (public.pem در مسیر داده شده)
-  static Future<JsonWebKey> _loadPublicKey() async {
-    final pem = await rootBundle.loadString('lib/src/core/security/public.pem');
-    final jwk = JsonWebKey.fromPem(pem);
-    return jwk;
-  }
-
-  // اعتبارسنجی آفلاین JWT — برمی‌گرداند payload اگر معتبر باشد، در غیر این صورت null
+  // این متد به‌صورت موقت payload را بدون بررسی امضا برمی‌گرداند
   static Future<Map<String, dynamic>?> verifyJwtOffline(String token) async {
     try {
-      final jwk = await _loadPublicKey();
-      final jws = JsonWebSignature.fromCompactSerialization(token);
-      final verified = jws.verify(jwk);
-      if (!verified) return null;
-      final payloadJson = jsonDecode(utf8.decode(jws.unverifiedPayload));
-      // اگر expires_at وجود داشت بررسی کن (timestamp ثانیه)
-      if (payloadJson is Map &&
-          payloadJson.containsKey('expires_at') &&
-          payloadJson['expires_at'] != null) {
-        final exp = int.parse(payloadJson['expires_at'].toString());
-        if (DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000 > exp) {
-          return null;
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      final payloadPart = parts[1];
+      // normalize base64Url و decode
+      String normalized = base64Url.normalize(payloadPart);
+      final payloadBytes = base64Url.decode(normalized);
+      final payloadJson = jsonDecode(utf8.decode(payloadBytes));
+      if (payloadJson is Map) {
+        // بررسی expire (مقدار expires_at باید بر حسب timestamp ثانیه باشد)
+        if (payloadJson.containsKey('expires_at') &&
+            payloadJson['expires_at'] != null) {
+          final exp = int.tryParse(payloadJson['expires_at'].toString()) ?? 0;
+          final nowSec = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+          if (exp > 0 && nowSec > exp) {
+            return null; // منقضی شده
+          }
         }
+        return Map<String, dynamic>.from(payloadJson);
       }
-      return Map<String, dynamic>.from(payloadJson);
+      return null;
     } catch (e) {
       return null;
     }

@@ -1,8 +1,9 @@
 // lib/src/pages/home/home_page.dart
 // صفحه اصلی ساده (پس از ورود) — فایل جدا
+// اصلاح import برای دسترسی به Provider صحیح (مسیر نسبی صحیح)
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
+import '../../providers/auth_provider.dart'; // مسیر اصلاح‌شده به providers
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -40,7 +41,7 @@ class HomePage extends StatelessWidget {
               const SizedBox(height: 12),
               if (auth.licensePayload != null)
                 Text(
-                  'انقضا: ${auth.licensePayload?['expires_at'] != null ? DateTime.fromMillisecondsSinceEpoch(auth.licensePayload!['expires_at'] * 1000).toLocal().toString() : "نامشخص"}',
+                  'انقضا: ${auth.licensePayload?['expires_at'] != null ? DateTime.fromMillisecondsSinceEpoch(int.parse(auth.licensePayload!['expires_at'].toString()) * 1000).toLocal().toString() : "نامشخص"}',
                 ),
             ],
           ),
